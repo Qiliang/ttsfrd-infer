@@ -28,9 +28,14 @@ jobs:
       - name: Check if version changed
         id: check
         run: |
-          git diff HEAD~1 HEAD -- pyproject.toml | grep '^+version' | grep -q '.' \
-            && echo "should_release=true" >> "$GITHUB_OUTPUT" \
-            || echo "should_release=false" >> "$GITHUB_OUTPUT"
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -le 1 ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            git diff HEAD~1 HEAD -- pyproject.toml | grep '^+version' | grep -q '.' \
+              && echo "should_release=true" >> "$GITHUB_OUTPUT" \
+              || echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build-and-push:
     needs: check-version
