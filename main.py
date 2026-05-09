@@ -41,13 +41,16 @@ class TextRequest(BaseModel):
 class TextResponse(BaseModel):
     text: str
 
+@app.get("/ping")
+def ping() -> TextResponse:
+    return {TextResponse(text="pong")}
 
-@app.post("/ttsfrd/")
+@app.post("/ttsfrd")
 def ttsfrd_http(req: TextRequest) -> TextResponse:
     return TextResponse(text=normalize(req.text))
 
 
-@app.websocket("/ttsfrd/")
+@app.websocket("/ttsfrd")
 async def ttsfrd_ws(websocket: WebSocket):
     await websocket.accept()
     try:
@@ -59,6 +62,6 @@ async def ttsfrd_ws(websocket: WebSocket):
             except (json.JSONDecodeError, AttributeError):
                 text = data
             normalized = normalize(text)
-            await websocket.send_text(json.dumps({"text": normalized}))
+            await websocket.send_text(json.dumps({"text": normalized}, ensure_ascii=False))
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected.")
