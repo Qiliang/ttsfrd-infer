@@ -1,0 +1,123 @@
+name: Sync to SVN
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      should_sync: ${{ steps.check.outputs.should_sync }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get current version
+        id: get_version
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version changed
+        id: check
+        run: |
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          if [ "$COMMIT_COUNT" -le 1 ]; then
+            echo "should_sync=true" >> "$GITHUB_OUTPUT"
+          else
+            git diff HEAD~1 HEAD -- pyproject.toml | grep '^+version' | grep -q '.' \
+              && echo "should_sync=true" >> "$GITHUB_OUTPUT" \
+              || echo "should_sync=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  sync-to-svn:
+    needs: check-version
+    if: needs.check-version.outputs.should_sync == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (with LFS)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify LFS files are real (not pointers)
+        run: |
+          git lfs pull
+          ls -lh cosyvoice-ttsfrd/resource.zip
+          file cosyvoice-ttsfrd/resource.zip
+
+      - name: Install Subversion
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y subversion rsync
+
+      - name: Checkout SVN working copy
+        env:
+          SVN_URL: ${{ secrets.SVN_URL }}
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        run: |
+          svn checkout \
+            --non-interactive \
+            --trust-server-cert-unknown-ca \
+            --username "$SVN_USERNAME" \
+            --password "$SVN_PASSWORD" \
+            "$SVN_URL" \
+            "$RUNNER_TEMP/svn-wc"
+
+      - name: Sync files (git -> svn working copy)
+        run: |
+          rsync -av --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.venv/' \
+            --exclude='__pycache__/' \
+            --exclude='.svn/' \
+            --exclude='*.pyc' \
+            --exclude='.pytest_cache/' \
+            --exclude='.ruff_cache/' \
+            --exclude='.mypy_cache/' \
+            ./ "$RUNNER_TEMP/svn-wc/"
+
+      - name: Stage SVN add/delete
+        working-directory: ${{ runner.temp }}/svn-wc
+        run: |
+          # Remove files that no longer exist in git but still tracked in svn
+          svn status | awk '/^!/ {print $2}' | while read -r f; do
+            svn delete --force "$f"
+          done
+          # Add new (untracked) files/dirs
+          svn status | awk '/^\?/ {print $2}' | while read -r f; do
+            svn add --force --parents "$f"
+          done
+
+      - name: Show SVN status
+        working-directory: ${{ runner.temp }}/svn-wc
+        run: svn status
+
+      - name: Commit to SVN
+        working-directory: ${{ runner.temp }}/svn-wc
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          VERSION: ${{ needs.check-version.outputs.version }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if svn status | grep -q .; then
+            svn commit \
+              --non-interactive \
+              --trust-server-cert-unknown-ca \
+              --username "$SVN_USERNAME" \
+              --password "$SVN_PASSWORD" \
+              -m "Sync from GitHub: v${VERSION} (${COMMIT_SHA})"
+          else
+            echo "No changes to commit."
+          fi

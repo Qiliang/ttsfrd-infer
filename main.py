@@ -5,12 +5,11 @@ from contextlib import asynccontextmanager
 import ttsfrd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-
+from rule import mail_replace
 logger = logging.getLogger("ttsfrd-infer")
 logging.basicConfig(level=logging.INFO)
 
 RESOURCE_DIR = "/app/resource"
-
 engine: ttsfrd.TtsFrontendEngine = None
 
 
@@ -35,6 +34,7 @@ def normalize(text: str) -> str:
 
 
 class TextRequest(BaseModel):
+    rules: list[str] = ["mail_replace"]
     text: str
 
 
@@ -47,7 +47,10 @@ def ping() -> TextResponse:
 
 @app.post("/ttsfrd")
 def ttsfrd_http(req: TextRequest) -> TextResponse:
-    return TextResponse(text=normalize(req.text))
+    text = normalize(req.text)
+    for rule in req.rules:
+        text = globals()[rule](text)
+    return TextResponse(text=text)
 
 
 @app.websocket("/ttsfrd")
