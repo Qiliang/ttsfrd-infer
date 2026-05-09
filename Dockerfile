@@ -1,5 +1,4 @@
-# 解压资源（resource.zip 极少变动，独立缓存）
-FROM astral/uv:python3.10-trixie AS resource-builder
+FROM astral/uv:python3.10-trixie AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
@@ -22,9 +21,6 @@ RUN uv pip install --no-cache \
     /tmp/ttsfrd-0.4.2-cp310-cp310-linux_x86_64.whl \
     && rm /tmp/*.whl
 
-# 安装应用层依赖（pyproject.toml / uv.lock 变动时重建）
-FROM whl-builder AS app-builder
-
 COPY pyproject.toml uv.lock* ./
 RUN uv sync
 
@@ -37,8 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=resource-builder /extracted/ ./
-COPY --from=app-builder /app/.venv .venv
+COPY --from=builder /extracted/ ./
+COPY --from=builder /app/.venv .venv
 
 COPY *.py .
 
