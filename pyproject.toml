@@ -1,10 +1,11 @@
 [project]
 name = "ttsfrd-infer"
-version = "0.1.10"
+version = "0.1.11"
 description = "ttsfrd infer"
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
 dependencies = [
+    "cosyvoice-ttsfrd>=0.4.3",
     "fastapi>=0.136.1",
     "uvicorn[standard]>=0.34.0",
 ]

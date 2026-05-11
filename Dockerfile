@@ -10,7 +10,8 @@ RUN unzip /tmp/resource.zip -d /extracted && rm /tmp/resource.zip
 
 WORKDIR /app
 
-RUN uv venv .venv
+COPY pyproject.toml uv.lock* ./
+RUN uv sync
 
 ENV VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH"
@@ -22,8 +23,7 @@ RUN uv pip install --no-cache \
     /tmp/ttsfrd-0.4.2-cp310-cp310-linux_x86_64.whl \
     && rm /tmp/*.whl
 
-COPY pyproject.toml uv.lock* ./
-RUN uv sync
+
 
 # 最终运行时（仅代码变动时重建此层）
 FROM astral/uv:python3.10-trixie AS runtime
