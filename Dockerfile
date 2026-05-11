@@ -42,5 +42,8 @@ ENV VIRTUAL_ENV=/app/.venv \
     PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
-# uvicorn main:app --host 0.0.0.0 --port 8000
+
+# 服务根路径前缀，例如 /ttsfrd/ping；可用 docker run -e CONTEXT_PATH=myapp 覆盖
+ENV CONTEXT_PATH=ttsfrd
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
